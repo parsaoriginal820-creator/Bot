@@ -7,7 +7,6 @@ import json
 
 # --- Configuration ---
 # کلیدها از Vercel خوانده می‌شوند
-# اصلاح: در اینجا باید نام متغیر (Key) را از Vercel بخوانید، نه مقدار آن را.
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") 
 
 # دیتابیس داخلی لینک‌ها
@@ -27,43 +26,64 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def search_movie_or_tv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
     if not TMDB_API_KEY:
-        # اگر توکن TMDB پیدا نشد (برای عیب‌یابی)
-        await update.message.reply_text("خطا: کلید TMDB API تنظیم نشده یا در Vercel پیدا نشد.")
+        await update.message.reply_text("خطا: کلید TMDB API تنظیم نشده است.")
         return
 
     params = {'api_key': TMDB_API_KEY, 'query': query, 'language': 'fa-IR'}
-    response = requests.get(SEARCH_URL, params=params)
-    data = response.json()
-
-    if data['results']:
-        item = data['results'][0]
-
-        # استخراج و ساخت کپشن
-        title = item.get('name') if item.get('media_type') == 'tv' else item.get('title')
-        overview = item.get('overview', 'توضیحات در دسترس نیست.')
-        caption = f"🎬 **نام:** {title}\n\n📝 **خلاصه داستان:** {overview}"
-
-        # منطق دکمه دانلود
-        keyboard = []
-        if title in DOWNLOAD_LINKS:
-            link = DOWNLOAD_LINKS[title]
-            button = InlineKeyboardButton(f"⬇️ دریافت لینک دانلود {title}", url=link)
-            keyboard.append([button])
+    
+    try:
+        response = requests.get(SEARCH_URL, params=params)
+        response.raise_for_status() # اگر وضعیت 4xx یا 5xx بود، خطا می‌دهد
+        data = response.json()
+    except requests.exceptions.RequestException as e:
+        # اگر در اتصال به TMDB یا دریافت داده مشکلی بود
+        print(f"TMDB Request Error: {e}")
+        await update.message.reply_text("خطا در برقراری ارتباط با دیتابیس فیلم‌ها (TMDB). لطفا بعدا تلاش کنید.")
+        return
+    except json.JSONDecodeError:
+        # اگر پاسخ JSON نبود (مثلا به دلیل کلید نامعتبر)
+        print("TMDB API Key is likely invalid or missing.")
+        await update.message.reply_text("خطا: کلید TMDB API نامعتبر است. لطفا کلید را در تنظیمات Vercel بررسی کنید.")
+        return
+        
+    # --- منطق اصلی جستجو ---
+    # بررسی می‌کنیم که آیا کلید 'results' وجود دارد یا خیر (اینجا خطای قبلی شما بود)
+    if 'results' not in data or not data['results']:
+        # اگر کلیدی با نام 'status_message' وجود داشت، یعنی TMDB یک پیام خطا برگردانده است
+        if 'status_message' in data:
+            print(f"TMDB Error: {data['status_message']}")
+            await update.message.reply_text(f"خطای TMDB: کلید API شما نامعتبر است. لطفا TMDB_API_KEY را در Vercel چک کنید.")
         else:
-            keyboard.append([InlineKeyboardButton("❌ لینک دانلود موجود نیست", callback_data='no_link')])
+            await update.message.reply_text(f"محتوایی با عنوان '{query}' پیدا نشد.")
+        return
+        
+    # ادامه منطق در صورت موفقیت آمیز بودن
+    item = data['results'][0]
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    # استخراج و ساخت کپشن
+    title = item.get('name') if item.get('media_type') == 'tv' else item.get('title')
+    overview = item.get('overview', 'توضیحات در دسترس نیست.')
+    caption = f"🎬 **نام:** {title}\n\n📝 **خلاصه داستان:** {overview}"
 
-        # ارسال پوستر
-        poster_path = item.get('poster_path')
-        poster_url = IMAGE_BASE_URL + poster_path if poster_path else None
-
-        if poster_url:
-            await update.message.reply_photo(photo=poster_url, caption=caption, parse_mode='Markdown', reply_markup=reply_markup)
-        else:
-            await update.message.reply_text(caption, parse_mode='Markdown', reply_markup=reply_markup)
+    # منطق دکمه دانلود
+    keyboard = []
+    if title in DOWNLOAD_LINKS:
+        link = DOWNLOAD_LINKS[title]
+        button = InlineKeyboardButton(f"⬇️ دریافت لینک دانلود {title}", url=link)
+        keyboard.append([button])
     else:
-        await update.message.reply_text(f"محتوایی با عنوان '{query}' پیدا نشد.")
+        keyboard.append([InlineKeyboardButton("❌ لینک دانلود موجود نیست", callback_data='no_link')])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # ارسال پوستر
+    poster_path = item.get('poster_path')
+    poster_url = IMAGE_BASE_URL + poster_path if poster_path else None
+
+    if poster_url:
+        await update.message.reply_photo(photo=poster_url, caption=caption, parse_mode='Markdown', reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(caption, parse_mode='Markdown', reply_markup=reply_markup)
 
 
 # 🚀 تابع اصلی Webhook
