@@ -7,7 +7,8 @@ import json
 
 # --- Configuration ---
 # کلیدها از Vercel خوانده می‌شوند
-TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
+# اصلاح: در اینجا باید نام متغیر (Key) را از Vercel بخوانید، نه مقدار آن را.
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY") 
 
 # دیتابیس داخلی لینک‌ها
 DOWNLOAD_LINKS = {
@@ -26,7 +27,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def search_movie_or_tv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
     if not TMDB_API_KEY:
-        await update.message.reply_text("خطا: کلید TMDB API تنظیم نشده است.")
+        # اگر توکن TMDB پیدا نشد (برای عیب‌یابی)
+        await update.message.reply_text("خطا: کلید TMDB API تنظیم نشده یا در Vercel پیدا نشد.")
         return
 
     params = {'api_key': TMDB_API_KEY, 'query': query, 'language': 'fa-IR'}
@@ -69,9 +71,10 @@ async def handler(request):
     if request.method != 'POST':
         return {'statusCode': 200, 'body': 'GET request received. Use Telegram!'}
 
+    # BOT_TOKEN توسط os.environ.get("BOT_TOKEN") در اینجا استفاده می‌شود
     BOT_TOKEN = os.environ.get("BOT_TOKEN") 
     if not BOT_TOKEN:
-        return {'statusCode': 500, 'body': 'BOT_TOKEN not set'}
+        return {'statusCode': 500, 'body': 'BOT_TOKEN not set in Environment Variables'}
 
     try:
         application = Application.builder().token(BOT_TOKEN).build()
@@ -85,4 +88,5 @@ async def handler(request):
 
         return {'statusCode': 200, 'body': 'OK'}
     except Exception as e:
+        # برای مشاهده دقیق خطا در لاگ‌های Vercel
         return {'statusCode': 500, 'body': f'Internal Server Error: {e}'}
