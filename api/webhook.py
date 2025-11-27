@@ -7,7 +7,7 @@ import json
 
 # --- Configuration ---
 # کلیدها از Vercel خوانده می‌شوند
-TMDB_API_KEY = os.environ.get("e4b747d1813c2fd29d07c58cf2b7ba35")
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
 
 # دیتابیس داخلی لینک‌ها
 DOWNLOAD_LINKS = {
